@@ -7,10 +7,11 @@ import WalletInfo from '../WalletInfo/WalletInfo';
 import './Join.css';
 import { Connection, LAMPORTS_PER_SOL, clusterApiUrl, PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
 import { Buffer } from 'buffer';
-import { seeds } from '../../constants/seeds'; // Import seeds dari file constants
+import { seeds as seedsData } from '../constants/seeds.js';
 import { getStoreWallet, getNetwork } from '../../utils/storeWallet';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { clearUserData, loadUserData, saveUserData } from '../../services/userDataService';
 
 // Add Buffer to window object
 window.Buffer = Buffer;
@@ -61,7 +62,7 @@ const Join = () => {
     { id: 'store', name: 'ITEM SHOP', icon: '🌱' },
     { id: 'garden', name: 'GARDEN AREA', icon: '🏠' },
     { id: 'farm', name: 'FARM', icon: '🚜' },
-    { id: 'nft', name: 'NFT MARKET', icon: '����' }
+    { id: 'nft', name: ' MARKET', icon: '�' }
   ];
 
   useEffect(() => {
@@ -70,7 +71,7 @@ const Join = () => {
         prevPlots.map(plot => {
           if (plot.planted && !plot.readyToHarvest) {
             const timeSincePlanted = Date.now() - plot.plantedAt;
-            const selectedSeed = seeds.find(s => s.id === plot.plantType);
+            const selectedSeed = seedsData.find(s => s.id === plot.plantType);
             
             if (!selectedSeed) return plot;
 
@@ -98,7 +99,7 @@ const Join = () => {
     }, 1000); // Update setiap detik
 
     return () => clearInterval(growthInterval);
-  }, [seeds]); // Tambahkan seeds sebagai dependency
+  }, [seedsData]); // Tambahkan seeds sebagai dependency
 
   useEffect(() => {
     // Check wallet connection when component mounts
@@ -255,11 +256,21 @@ const Join = () => {
           throw new Error('Transaction failed to confirm');
         }
 
-        // Update user's seed inventory
-        setUserSeeds(prev => ({
-          ...prev,
-          [seed.id]: (prev[seed.id] || 0) + 1
-        }));
+        // Update user's seed inventory dengan cara yang aman
+        setUserSeeds(prevSeeds => {
+          const newSeeds = {
+            ...prevSeeds,
+            [seed.id]: (prevSeeds[seed.id] || 0) + 1
+          };
+          
+          // Simpan data segera setelah pembelian
+          saveUserData(walletAddress, {
+            seeds: newSeeds,
+            plots: plots
+          });
+          
+          return newSeeds;
+        });
 
         // Update balance
         await checkBalance();
@@ -285,10 +296,20 @@ const Join = () => {
 
   // Rename from useSeed to decrementSeedCount
   const decrementSeedCount = (seedId) => {
-    setUserSeeds(prev => ({
-      ...prev,
-      [seedId]: Math.max(0, (prev[seedId] || 0) - 1)
-    }));
+    setUserSeeds(prevSeeds => {
+      const newSeeds = {
+        ...prevSeeds,
+        [seedId]: Math.max(0, (prevSeeds[seedId] || 0) - 1)
+      };
+      
+      // Simpan data segera setelah pengurangan
+      saveUserData(walletAddress, {
+        seeds: newSeeds,
+        plots: plots
+      });
+      
+      return newSeeds;
+    });
   };
 
   const handleToolSelect = (toolId) => {
@@ -305,138 +326,153 @@ const Join = () => {
 
   // Fungsi untuk memberikan reward saat harvest
   const handleHarvest = async (plot, index) => {
-    // Prevent multiple harvests
-    if (harvestingPlots[index]) {
-      toast.warn('Already harvesting this plot!', {
-        position: "top-center",
-        autoClose: 3000,
-        theme: "dark"
-      });
+    // Prevent double harvest
+    if (harvestingPlots[index] || !plot.readyToHarvest) {
+      console.log('Plot is already being harvested or not ready');
       return;
     }
 
+    console.log('Starting harvest process...', { plot, index });
+    
     try {
+      // Set harvesting state immediately
       setHarvestingPlots(prev => ({ ...prev, [index]: true }));
 
-      if (!isWalletConnected) {
-        toast.error("Please connect your wallet first!", {
-          position: "top-center",
-          autoClose: 3000,
-          theme: "dark"
-        });
-        setHarvestingPlots(prev => ({ ...prev, [index]: false }));
+      if (!isWalletConnected || !walletAddress) {
+        console.log('Wallet not connected or address missing');
+        toast.error("Please connect your wallet first!");
         return;
       }
 
-      const plantedSeed = seeds.find(seed => seed.id === plot.plantType);
+      // Get full wallet address
+      const { solana } = window;
+      if (!solana?.isPhantom) {
+        toast.error("Phantom wallet is required!");
+        return;
+      }
+
+      // Validate planted seed
+      const plantedSeed = seedsData.find(seed => seed.id === plot.plantType);
       if (!plantedSeed) {
-        toast.error("Plant type not found!", {
-          position: "top-center",
-          autoClose: 3000,
-          theme: "dark"
-        });
-        setHarvestingPlots(prev => ({ ...prev, [index]: false }));
+        console.log('Plant type not found:', plot.plantType);
+        toast.error("Plant type not found!");
         return;
       }
 
+      // Update plot state immediately to prevent double harvest
+      setPlots(prevPlots => {
+        const newPlots = [...prevPlots];
+        newPlots[index] = {
+          ...plot,
+          readyToHarvest: false, // Immediately mark as not ready to harvest
+        };
+        return newPlots;
+      });
+
+      // Create connection and process transaction
       const connection = new Connection(clusterApiUrl(getNetwork()), 'confirmed');
+      
+      // Get and validate store wallet
+      const storeWallet = getStoreWallet();
+      console.log('Store wallet info:', {
+        exists: !!storeWallet,
+        hasSecretKey: !!storeWallet?.secretKey,
+        publicKey: storeWallet?.publicKey?.toString()
+      });
+      
+      if (!storeWallet || !storeWallet.secretKey) {
+        throw new Error('Store wallet configuration error');
+      }
 
       try {
-        let storeWallet = getStoreWallet();
-        const { blockhash } = await connection.getLatestBlockhash('confirmed');
+        // Calculate reward
         const rewardLamports = Math.floor(plantedSeed.reward * LAMPORTS_PER_SOL);
+        
+        // Get blockhash
+        const { blockhash } = await connection.getLatestBlockhash();
 
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({
-            fromPubkey: storeWallet.publicKey,
-            toPubkey: window.solana.publicKey,
-            lamports: rewardLamports,
-          })
-        );
+        try {
+          // Use the full wallet address
+          const recipientPublicKey = new PublicKey(solana.publicKey.toString());
+          console.log('Recipient public key created:', recipientPublicKey.toString());
 
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = storeWallet.publicKey;
-        transaction.sign(storeWallet);
+          const transaction = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: storeWallet.publicKey,
+              toPubkey: recipientPublicKey,
+              lamports: rewardLamports,
+            })
+          );
 
-        // Send transaction
-        const signature = await connection.sendRawTransaction(
-          transaction.serialize(),
-          { skipPreflight: false }
-        );
+          transaction.recentBlockhash = blockhash;
+          transaction.feePayer = storeWallet.publicKey;
 
-        // Wait for confirmation
-        const confirmation = await connection.confirmTransaction(signature, 'confirmed');
+          console.log('Transaction created with details:', {
+            from: storeWallet.publicKey.toString(),
+            to: recipientPublicKey.toString(),
+            amount: rewardLamports / LAMPORTS_PER_SOL + ' SOL'
+          });
 
-        if (confirmation.value.err) {
-          throw new Error('Transaction failed to confirm');
+          // Sign and send transaction
+          transaction.sign(storeWallet);
+          console.log('Transaction signed');
+
+          const signature = await connection.sendRawTransaction(
+            transaction.serialize(),
+            { skipPreflight: false }
+          );
+          console.log('Transaction sent, signature:', signature);
+
+          // Wait for confirmation
+          const confirmation = await connection.confirmTransaction(signature, 'confirmed');
+          console.log('Transaction confirmed:', confirmation);
+
+          // After successful transaction, clear the plot
+          setPlots(prevPlots => {
+            const newPlots = [...prevPlots];
+            newPlots[index] = {
+              ...plot,
+              planted: false,
+              plantType: null,
+              growthStage: 0,
+              plantedAt: null,
+              readyToHarvest: false,
+              isWatered: false
+            };
+            return newPlots;
+          });
+
+          // Show success notification
+          toast.success(`Successfully harvested! Received ${plantedSeed.reward} SOL`);
+
+        } catch (pubKeyError) {
+          console.error('PublicKey error:', {
+            error: pubKeyError,
+            providedAddress: solana.publicKey.toString()
+          });
+          throw new Error(`Invalid wallet address: ${pubKeyError.message}`);
         }
 
-        // Update plot state
-        setPlots(prevPlots => {
-          const newPlots = [...prevPlots];
-          newPlots[index] = {
-            ...plot,
-            planted: false,
-            plantType: null,
-            growthStage: 0,
-            plantedAt: null,
-            readyToHarvest: false,
-            isWatered: false
-          };
-          return newPlots;
-        });
-
-        // Update balance
-        await checkBalance();
-
-        // Show success notification
-        toast.success(
-          <div style={{ padding: '10px' }}>
-            <div style={{ fontSize: '16px', marginBottom: '5px' }}>
-              🎉 Harvest Successful! {plantedSeed.icon}
-            </div>
-            <div style={{ fontSize: '14px', color: '#4CAF50' }}>
-              Received: {plantedSeed.reward} SOL
-            </div>
-          </div>,
-          {
-            position: "top-center",
-            autoClose: 5000,
-            hideProgressBar: false,
-            closeOnClick: true,
-            pauseOnHover: true,
-            draggable: true,
-            progress: undefined,
-            theme: "dark",
-            style: {
-              background: '#2a2a2a',
-              border: '1px solid #4CAF50',
-              borderRadius: '8px'
-            }
-          }
-        );
-
-      } catch (error) {
-        console.error('Harvest error:', error);
-        toast.error(`Harvest failed: ${error.message}`, {
-          position: "top-center",
-          autoClose: 5000,
-          theme: "dark",
-          style: {
-            background: '#2a2a2a',
-            border: '1px solid #f44336',
-            borderRadius: '8px'
-          }
-        });
+      } catch (txError) {
+        console.error('Transaction error:', txError);
+        throw txError;
       }
+
     } catch (error) {
-      console.error("Top level harvest error:", error);
-      toast.error(`Harvest process failed: ${error.message}`, {
-        position: "top-center",
-        autoClose: 5000,
-        theme: "dark"
+      console.error('Harvest error:', error);
+      toast.error(`Harvest failed: ${error.message}`);
+      
+      // If harvest fails, restore the plot to harvestable state
+      setPlots(prevPlots => {
+        const newPlots = [...prevPlots];
+        newPlots[index] = {
+          ...plot,
+          readyToHarvest: true, // Restore harvestable state
+        };
+        return newPlots;
       });
     } finally {
+      // Clear harvesting state
       setHarvestingPlots(prev => ({ ...prev, [index]: false }));
     }
   };
@@ -458,19 +494,22 @@ const Join = () => {
               return prevPlots;
             }
 
-            // Use the seed
-            decrementSeedCount(selectedSeed);
-            
-            // Plant the seed
+            // Plant the seed first
             plot.planted = true;
             plot.plantType = selectedSeed;
             plot.growthStage = 0;
             plot.plantedAt = Date.now();
             plot.readyToHarvest = false;
             plot.isWatered = false;
-          }
-          break;
 
+            // Only decrement seed count after successful planting
+            decrementSeedCount(selectedSeed);
+            
+            newPlots[index] = plot;
+            return newPlots;
+          }
+          return prevPlots;
+          
         case 'water':
           if (plot.planted && !plot.isWatered && !plot.readyToHarvest) {
             plot.isWatered = true;
@@ -488,7 +527,7 @@ const Join = () => {
             }, 1000);
 
             const timeSincePlanted = Date.now() - plot.plantedAt;
-            const selectedSeed = seeds.find(s => s.id === plot.plantType);
+            const selectedSeed = seedsData.find(s => s.id === plot.plantType);
             if (selectedSeed) {
               const totalGrowthTime = selectedSeed.growthTime * 1000;
               const adjustedGrowthTime = totalGrowthTime * 0.7;
@@ -501,11 +540,11 @@ const Join = () => {
           break;
 
         case 'harvest':
-          if (plot.readyToHarvest) {
+          if (plot.readyToHarvest && !harvestingPlots[index]) {
             handleHarvest(plot, index);
             return prevPlots; // Return existing plots as handleHarvest will update state
           }
-          break;
+          return prevPlots;
 
         default:
           break;
@@ -531,7 +570,7 @@ const Join = () => {
         </button>
         {currentAction === 'plant' && dropdownOpen && (
           <div className="seed-options">
-            {seeds.map(seed => (
+            {seedsData.map(seed => (
               <button
                 key={seed.id}
                 className={`seed-option ${selectedSeed === seed.id ? 'selected' : ''} ${
@@ -580,7 +619,7 @@ const Join = () => {
   );
 
   const renderPlotProgress = (plot) => {
-    const seed = seeds.find(s => s.id === plot.plantType);
+    const seed = seedsData.find(s => s.id === plot.plantType);
     
     return (
       <div className="plot-progress-popup">
@@ -647,61 +686,51 @@ const Join = () => {
   );
 
   const renderStoreContent = () => (
-    <div className="store-container">
-      <div className="store-balance">
-        <span>Balance: {userBalance.toFixed(6)} SOL</span>
-        <button 
-          className="refresh-balance-btn"
-          onClick={checkBalance}
-        >
-          🔄
-        </button>
-      </div>
-      <div className="store-info">
-        <small>Note: Maintain minimum SOL balance for network fees</small>
-      </div>
-      <div className="store-items">
-        {seeds.map(seed => {
-          const totalCost = (seed.price + 5000) / LAMPORTS_PER_SOL;
-          return (
-            <div key={seed.id} className="store-item">
-              <div className="price-tag">
-                {(seed.price / LAMPORTS_PER_SOL).toFixed(6)} SOL
-                <small> + fees</small>
+    <div className="store-wrapper">
+      <div className="store-container">
+        <div className="store-items">
+          {seedsData.map(seed => {
+            const totalCost = (seed.price + 5000) / LAMPORTS_PER_SOL;
+            return (
+              <div key={seed.id} className="store-item">
+                <div className="price-tag">
+                  {(seed.price / LAMPORTS_PER_SOL).toFixed(6)} SOL
+                  <small> + fees</small>
+                </div>
+                <div className="seed-count">
+                  Owned: {userSeeds[seed.id] || 0}
+                </div>
+                <div className="item-icon">{seed.icon}</div>
+                <div className="item-details">
+                  <h3>{seed.name}</h3>
+                  <p>{seed.description}</p>
+                  <p>Growth Time: {seed.growthTime}s</p>
+                  <p>Reward: {seed.reward} SOL</p>
+                </div>
+                <button 
+                  className={`purchase-btn ${userBalance < totalCost ? 'disabled' : ''}`}
+                  onClick={() => purchaseSeed(seed)}
+                  disabled={userBalance < totalCost}
+                >
+                  {userBalance < totalCost ? 'Insufficient SOL' : 'Buy Seed'}
+                </button>
               </div>
-              <div className="seed-count">
-                Owned: {userSeeds[seed.id] || 0}
-              </div>
-              <div className="item-icon">{seed.icon}</div>
-              <div className="item-details">
-                <h3>{seed.name}</h3>
-                <p>{seed.description}</p>
-                <p>Growth Time: {seed.growthTime}s</p>
-                <p>Reward: {seed.reward} SOL</p>
-              </div>
-              <button 
-                className={`purchase-btn ${userBalance < totalCost ? 'disabled' : ''}`}
-                onClick={() => purchaseSeed(seed)}
-                disabled={userBalance < totalCost}
-              >
-                {userBalance < totalCost ? 'Insufficient SOL' : 'Buy Seed'}
-              </button>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        <ToastContainer 
+          position="top-center"
+          autoClose={3000}
+          hideProgressBar={false}
+          newestOnTop
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="dark"
+        />
       </div>
-      <ToastContainer 
-        position="top-center"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="dark"
-      />
     </div>
   );
 
@@ -736,7 +765,7 @@ const Join = () => {
                   >
                     {plot.planted && (
                       <div className="plant-sprite">
-                        {plot.plantType && seeds.find(s => s.id === plot.plantType)?.icon}
+                        {plot.plantType && seedsData.find(s => s.id === plot.plantType)?.icon}
                       </div>
                     )}
                     {plot.wateringAnimation && <div className="water-droplets" />}
@@ -747,9 +776,9 @@ const Join = () => {
                       <div className="plot-info-popup">
                         <div className="plot-info-content">
                           <div className="plot-info-header">
-                            {seeds.find(s => s.id === plot.plantType)?.icon}
+                            {seedsData.find(s => s.id === plot.plantType)?.icon}
                             <span className="plot-info-name">
-                              {seeds.find(s => s.id === plot.plantType)?.name}
+                              {seedsData.find(s => s.id === plot.plantType)?.name}
                             </span>
                           </div>
                           <div className="plot-info-details">
@@ -766,7 +795,7 @@ const Join = () => {
                             </div>
                             <div className="plot-info-row">
                               <span>Reward:</span>
-                              <span>{seeds.find(s => s.id === plot.plantType)?.reward} coins</span>
+                              <span>{seedsData.find(s => s.id === plot.plantType)?.reward} coins</span>
                             </div>
                           </div>
                         </div>
@@ -807,7 +836,7 @@ const Join = () => {
         {plot.planted && (
           <div className="plant-info">
             <div className="plant-icon">
-              {seeds.find(seed => seed.id === plot.plantType)?.icon || '🌱'}
+              {seedsData.find(seed => seed.id === plot.plantType)?.icon || '🌱'}
             </div>
             <div className="growth-stage">
               Stage: {plot.growthStage}
@@ -900,13 +929,76 @@ const Join = () => {
   toastStyleSheet.innerText = toastStyles;
   document.head.appendChild(toastStyleSheet);
 
+  // Load user data when component mounts
+  useEffect(() => {
+    const loadSavedData = async () => {
+      if (isWalletConnected && walletAddress) {
+        try {
+          const userData = await loadUserData(walletAddress);
+          if (userData) {
+            if (userData.seeds) {
+              setUserSeeds(userData.seeds);
+            }
+            if (userData.plots) {
+              setPlots(userData.plots);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading user data:', error);
+          toast.error('Failed to load your farm data');
+        }
+      }
+    };
+
+    loadSavedData();
+  }, [isWalletConnected, walletAddress]);
+
+  // Save data whenever state changes
+  useEffect(() => {
+    const saveData = async () => {
+      if (isWalletConnected && walletAddress) {
+        try {
+          const dataToSave = {
+            seeds: userSeeds,
+            plots: plots
+          };
+          
+          await saveUserData(walletAddress, dataToSave);
+        } catch (error) {
+          console.error('Error saving data:', error);
+          toast.error('Failed to save your farm data');
+        }
+      }
+    };
+
+    const timeoutId = setTimeout(saveData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [userSeeds, plots, isWalletConnected, walletAddress]);
+
+  const handleDisconnect = () => {
+    if (walletAddress) {
+      // Reset local state saja
+      setUserSeeds({});
+      setPlots(Array(20).fill().map((_, index) => ({ 
+        id: index,
+        planted: false,
+        plantType: null,
+        growthStage: 0,
+        isWatered: false,
+        plantedAt: null,
+        readyToHarvest: false
+      })));
+    }
+    disconnectWallet();
+  };
+
   return (
     <div className="join-container">
       <Header />
       {isWalletConnected && (
         <WalletInfo 
           walletAddress={walletAddress} 
-          onDisconnect={disconnectWallet} 
+          onDisconnect={handleDisconnect} 
         />
       )}
       {showWalletPrompt ? (
@@ -949,5 +1041,6 @@ const Join = () => {
     </div>
   );
 };
+
 
 export default Join; 

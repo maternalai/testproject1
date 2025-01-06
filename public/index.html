@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Void Protocol</title>
+    <script>
+      window.addEventListener('error', (event) => {
+        if (event.filename?.includes('content.1.bundle.js') || 
+            event.message?.includes('browser extension')) {
+          event.preventDefault();
+          return false;
+        }
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -2,13 +2,17 @@ import React from 'react';
 import './WalletInfo.css';
 
 const WalletInfo = ({ walletAddress, onDisconnect }) => {
-  if (!walletAddress) return null;
+  // Fungsi untuk memformat address
+  const formatAddress = (address) => {
+    if (!address) return '';
+    return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  };
 
   return (
     <div className="wallet-info">
       <div className="wallet-address">
         <span className="wallet-icon">👛</span>
-        <span className="address">{walletAddress}</span>
+        {formatAddress(walletAddress)}
       </div>
       <button onClick={onDisconnect} className="disconnect-btn">
         Disconnect

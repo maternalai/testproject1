@@ -3,8 +3,8 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 const WalletContext = createContext();
 
 export const WalletProvider = ({ children }) => {
+  const [walletAddress, setWalletAddress] = useState(null);
   const [isWalletConnected, setIsWalletConnected] = useState(false);
-  const [walletAddress, setWalletAddress] = useState('');
   const [notification, setNotification] = useState(null);
   const [notificationVisible, setNotificationVisible] = useState(false);
 
@@ -48,24 +48,14 @@ export const WalletProvider = ({ children }) => {
   const connectWallet = async () => {
     try {
       const { solana } = window;
-      
-      if (!solana?.isPhantom) {
-        window.open('https://phantom.app/', '_blank');
-        return;
-      }
-
-      const response = await solana.connect();
-      setWalletAddress(shortenAddress(response.publicKey.toString()));
-      setIsWalletConnected(true);
-      
-      if (!notificationVisible) {
-        showWalletNotification('Successfully connected to wallet!');
+      if (solana?.isPhantom) {
+        const response = await solana.connect();
+        const address = response.publicKey.toString();
+        console.log('Connected wallet address:', address);
+        setWalletAddress(address);
       }
     } catch (error) {
-      console.error("Error connecting to wallet:", error);
-      if (!notificationVisible) {
-        showWalletNotification('Failed to connect wallet', true);
-      }
+      console.error('Wallet connection error:', error);
     }
   };
 
@@ -95,10 +85,8 @@ export const WalletProvider = ({ children }) => {
 
   return (
     <WalletContext.Provider value={{
-      isWalletConnected,
       walletAddress,
-      notification,
-      notificationVisible,
+      isWalletConnected: !!walletAddress,
       connectWallet,
       disconnectWallet,
       showWalletNotification
@@ -108,4 +96,10 @@ export const WalletProvider = ({ children }) => {
   );
 };
 
-export const useWallet = () => useContext(WalletContext); 
+export const useWallet = () => {
+  const context = useContext(WalletContext);
+  if (!context) {
+    throw new Error('useWallet must be used within a WalletProvider');
+  }
+  return context;
+}; 
