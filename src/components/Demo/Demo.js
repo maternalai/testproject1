@@ -4,7 +4,7 @@ import Footer from '../Footer/Footer';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../../context/WalletContext';
 import WalletInfo from '../WalletInfo/WalletInfo';
-import './Join.css';
+import './Demo.css';
 import { Connection, LAMPORTS_PER_SOL, clusterApiUrl, PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
 import { Buffer } from 'buffer';
 import { seeds as seedsData } from '../constants/seeds.js';
@@ -109,8 +109,126 @@ const HarvestSuccessPopup = ({ onClose, plantName, reward, plantIcon }) => {
   );
 };
 
-const Join = () => {
+const tools = [
+    { id: 'store', name: 'ITEM SHOP', icon: '🌱' },
+    { id: 'garden', name: 'GARDEN AREA', icon: '🏠' },
+    { id: 'farm', name: 'FARM', icon: '🚜' },
+    { id: 'nft', name: ' MARKET', icon: 'X' }
+  ];
+
+const LoginPanel = ({ onClose, onSuccess }) => {
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [formData, setFormData] = useState({
+    username: '',
+    password: '',
+    email: '' // hanya untuk registrasi
+  });
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    
+    try {
+      const endpoint = isRegistering ? '/api/register' : '/api/login';
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Authentication failed');
+      }
+
+      // Simpan token di localStorage
+      localStorage.setItem('userToken', data.token);
+      onSuccess(data);
+      toast.success(isRegistering ? 'Registration successful!' : 'Login successful!');
+    } catch (err) {
+      setError(err.message);
+      toast.error(err.message);
+    }
+  };
+
+  return (
+    <div className="login-overlay">
+      <div className="login-panel">
+        <button className="close-button" onClick={onClose}>×</button>
+        <h2>{isRegistering ? 'Register' : 'Login'}</h2>
+        {error && <div className="error-message">{error}</div>}
+        
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Username</label>
+            <input
+              type="text"
+              value={formData.username}
+              onChange={(e) => setFormData({...formData, username: e.target.value})}
+              required
+            />
+          </div>
+          
+          {isRegistering && (
+            <div className="form-group">
+              <label>Email</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                required
+              />
+            </div>
+          )}
+          
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({...formData, password: e.target.value})}
+              required
+            />
+          </div>
+
+          <button type="submit" className="pixel-button primary">
+            {isRegistering ? 'Register' : 'Login'}
+          </button>
+        </form>
+
+        <div className="auth-switch">
+          <p>
+            {isRegistering 
+              ? 'Already have an account?' 
+              : "Don't have an account?"}
+          </p>
+          <button 
+            className="switch-button"
+            onClick={() => setIsRegistering(!isRegistering)}
+          >
+            {isRegistering ? 'Login' : 'Register'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Pindahkan formatWalletAddress ke luar komponen Demo
+const formatWalletAddress = (address) => {
+  if (!address) return '';
+  return `${address.slice(0, 4)}...${address.slice(-4)}`;
+};
+
+const Demo = () => {
   const navigate = useNavigate();
+  const [showInitialScreen, setShowInitialScreen] = useState(true);
+  const [showSocialPopup, setShowSocialPopup] = useState(false);
+  const [showWalletPrompt, setShowWalletPrompt] = useState(false);
   const [selectedTool, setSelectedTool] = useState('store');
   const [currentAction, setCurrentAction] = useState(null);
   const [selectedSeed, setSelectedSeed] = useState(null);
@@ -126,7 +244,6 @@ const Join = () => {
   })));
   const [hoveredPlot, setHoveredPlot] = useState(null);
   const [harvestNotification, setHarvestNotification] = useState(null);
-  const [showWalletPrompt, setShowWalletPrompt] = useState(true);
   const [userSeeds, setUserSeeds] = useState({}); // Track owned seeds
   const [userBalance, setUserBalance] = useState(0); // Track SOL balance
   const STORE_WALLET = new PublicKey('BjRqc12wBARLf1ja7Rxax3asFcx1ND7yPcyiSwABWawP'); // Contoh alamat wallet
@@ -135,6 +252,10 @@ const Join = () => {
   const [selectedPlotForHarvest, setSelectedPlotForHarvest] = useState(null);
   const [showHarvestSuccess, setShowHarvestSuccess] = useState(false);
   const [harvestSuccessInfo, setHarvestSuccessInfo] = useState(null);
+  const [showLoginPanel, setShowLoginPanel] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [followedTwitter, setFollowedTwitter] = useState(false);
+  const [followedTelegram, setFollowedTelegram] = useState(false);
 
   const { 
     isWalletConnected, 
@@ -788,14 +909,19 @@ const Join = () => {
   };
 
   const WalletPrompt = () => (
-    <div className="wallet-prompt">
-      <div className="wallet-prompt-content">
-        <div className="wallet-prompt-icon">👛</div>
-        <h2>Connect Wallet Required</h2>
-        <p>Please connect your Phantom wallet to access the game</p>
-        <button onClick={connectWallet} className="connect-wallet-btn">
-          {!window.solana?.isPhantom ? 'Install Phantom Wallet' : 'Connect Wallet'}
-        </button>
+    <div className="wallet-prompt-overlay">
+      <div className="wallet-prompt">
+        <div className="wallet-prompt-content">
+          <div className="wallet-prompt-icon">👛</div>
+          <h2>Connect Wallet Required</h2>
+          <p>Please connect your Phantom wallet to access the game</p>
+          <button 
+            className="connect-wallet-btn"
+            onClick={connectWallet}
+          >
+            {!window.solana?.isPhantom ? 'Install Phantom Wallet' : 'Connect Wallet'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1107,18 +1233,166 @@ const Join = () => {
     disconnectWallet();
   };
 
+  const handleLogin = () => {
+    navigate('/login');
+  };
+
+  const handleLoginSuccess = (userData) => {
+    setShowLoginPanel(false);
+    setIsAuthenticated(true);
+    setShowInitialScreen(false);
+  };
+
+  const handleLeaderboard = () => {
+    toast.info("Leaderboard coming soon!");
+  };
+
+  // Komponen InitialScreen
+  const InitialScreen = ({ onStartGame, onLeaderboard }) => (
+    <div className="initial-screen">
+      <div className="initial-content">
+        <h1>Welcome to Solana Garden</h1>
+        <p>Start your farming journey or check the leaderboard</p>
+        <div className="initial-buttons">
+          <button 
+            className="pixel-button primary"
+            onClick={onStartGame}
+          >
+            Start Game
+          </button>
+          <button 
+            className="pixel-button secondary" 
+            onClick={onLeaderboard}
+          >
+            Leaderboard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Cek status wallet saat komponen dimount
+  useEffect(() => {
+    if (isWalletConnected) {
+      setShowInitialScreen(false);
+      setShowWalletPrompt(false);
+    }
+  }, [isWalletConnected]);
+
+  // Update fungsi handleStartGame
+  const handleStartGame = () => {
+    if (isWalletConnected) {
+      setShowInitialScreen(false);
+      setShowWalletPrompt(false);
+      setShowSocialPopup(false);
+    } else {
+      setShowSocialPopup(true);
+      setShowInitialScreen(false);
+    }
+  };
+
+  // Update komponen SocialFollowPopup
+  const SocialFollowPopup = ({ onClose }) => {
+    const handleTwitterFollow = () => {
+      window.open('https://twitter.com/SolanaGarden', '_blank');
+      setFollowedTwitter(true);
+    };
+
+    const handleTelegramFollow = () => {
+      window.open('https://t.me/SolanaGarden', '_blank');
+      setFollowedTelegram(true);
+    };
+
+    const handleContinue = () => {
+      if (followedTwitter && followedTelegram) {
+        setShowSocialPopup(false);
+        setShowWalletPrompt(true);
+      } else {
+        toast.error('Please follow both Twitter and Telegram to continue!');
+      }
+    };
+
+    return (
+      <div className="social-follow-overlay">
+        <div className="social-follow-popup">
+          <button className="close-button" onClick={onClose}>×</button>
+          <h2>Follow Us!</h2>
+          <p>Please follow our social media to continue:</p>
+          
+          <div className="social-buttons">
+            <button 
+              className={`social-button twitter ${followedTwitter ? 'followed' : ''}`}
+              onClick={handleTwitterFollow}
+            >
+              <span className="social-icon">𝕏</span>
+              {followedTwitter ? 'Followed' : 'Follow Twitter'}
+            </button>
+
+            <button 
+              className={`social-button telegram ${followedTelegram ? 'followed' : ''}`}
+              onClick={handleTelegramFollow}
+            >
+              <span className="social-icon">📱</span>
+              {followedTelegram ? 'Joined' : 'Join Telegram'}
+            </button>
+          </div>
+
+          <button 
+            className={`continue-button ${(followedTwitter && followedTelegram) ? 'active' : 'disabled'}`}
+            onClick={handleContinue}
+          >
+            Continue to Game
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="join-container">
+    <div className="demo-container">
       <Header />
       {isWalletConnected && (
-        <WalletInfo 
-          walletAddress={walletAddress} 
-          onDisconnect={handleDisconnect} 
+        <div className="wallet-info">
+          <div className="wallet-address">
+            <span className="wallet-icon">👛</span>
+            {formatWalletAddress(walletAddress)}
+          </div>
+          <button 
+            className="disconnect-btn"
+            onClick={disconnectWallet}
+          >
+            Disconnect
+          </button>
+        </div>
+      )}
+
+      {notification && (
+        <div className={`wallet-notification ${notification.type}`}>
+          {notification.message}
+        </div>
+      )}
+
+      {showInitialScreen && (
+        <InitialScreen 
+          onStartGame={handleStartGame}
+          onLeaderboard={handleLeaderboard}
         />
       )}
-      {showWalletPrompt ? (
+      
+      {showSocialPopup && !isWalletConnected && (
+        <SocialFollowPopup 
+          onClose={() => {
+            setShowSocialPopup(false);
+            setShowInitialScreen(true);
+          }}
+        />
+      )}
+      
+      {showWalletPrompt && !isWalletConnected && (
         <WalletPrompt />
-      ) : (
+      )}
+
+      {!showInitialScreen && !showWalletPrompt && !showSocialPopup && isWalletConnected && (
         <>
           <div className="tools-container">
             <div className="tools-bar">
@@ -1134,44 +1408,13 @@ const Join = () => {
               ))}
             </div>
           </div>
-          {renderHarvestNotification()}
           {renderContent()}
         </>
       )}
-      {showHarvestConfirm && selectedPlotForHarvest && (
-        <HarvestConfirmPopup
-          plantName={seedsData.find(seed => seed.id === selectedPlotForHarvest.plot.plantType)?.name || 'plant'}
-          plantIcon={seedsData.find(seed => seed.id === selectedPlotForHarvest.plot.plantType)?.icon || '🌱'}
-          onConfirm={handleHarvestConfirm}
-          onCancel={handleHarvestCancel}
-        />
-      )}
-      {showHarvestSuccess && harvestSuccessInfo && (
-        <HarvestSuccessPopup
-          plantName={harvestSuccessInfo.plantName}
-          plantIcon={harvestSuccessInfo.plantIcon}
-          reward={harvestSuccessInfo.reward}
-          onClose={handleSuccessClose}
-        />
-      )}
-      <WalletNotification notification={notification} />
       <Footer />
-      <ToastContainer 
-        position="top-center"
-        autoClose={5000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="dark"
-        limit={3}
-      />
+      <ToastContainer />
     </div>
   );
 };
 
-
-export default Join; 
+export default Demo; 

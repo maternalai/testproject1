@@ -1,7 +1,6 @@
 .game-header {
   width: 100%;
   padding: 20px;
-  margin-bottom: 30px;
   background: linear-gradient(145deg, #000000, #654321);
   border-bottom: 4px solid #FFD700;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
@@ -12,7 +11,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 10px;
   padding: 20px;
   background: rgba(139, 69, 19, 0.9);
   border: 3px solid #FFD700;
@@ -167,6 +166,49 @@
 .pixel-button {
   background-color: #8B4513 !important;
   color: #FFD700 !important;
+}
+
+.logo-image {
+  max-height: 150px;
+  width: auto;
+}
+
+.pixel-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #666;
+  color: #999;
+  border-color: #444;
+  pointer-events: none;
+  text-decoration: none;
+  position: relative;
+}
+
+.pixel-button.disabled::after {
+  content: "Coming Soon";
+  position: absolute;
+  bottom: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.pixel-button.disabled:hover::after {
+  opacity: 1;
+}
+
+.pixel-button.disabled:hover {
+  transform: none;
+  box-shadow: none;
+  background: #666;
 }
 
 

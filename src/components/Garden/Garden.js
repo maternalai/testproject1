@@ -2,6 +2,7 @@ import React from 'react';
 import Header from '../Header/Header';
 import Footer from '../Footer/Footer';
 import './Garden.css';
+import { useNavigate } from 'react-router-dom';
 
 // Import pixel art icons
 import farmingIcon from '../../assets/Premium/Animals/Cow/Free Cow Sprites.png';
@@ -178,6 +179,12 @@ const TOKENOMICS_DATA = [
 ];
 
 const Garden = () => {
+  const navigate = useNavigate();
+
+  const handleConnectWallet = () => {
+    navigate('/join');
+  };
+
   return (
     <div className="game-container">
       <Header />
@@ -189,8 +196,12 @@ const Garden = () => {
             Start your journey in the world of blockchain gardening. Plant, grow, and trade unique pixel plants as NFTs.
           </p>
           <div className="cta-buttons">
-            <button className="pixel-button primary">Connect Wallet</button>
-            <button className="pixel-button secondary">Learn More</button>
+            <button 
+              className="pixel-button primary"
+              onClick={handleConnectWallet}
+            >
+              Let's Go!
+            </button>
           </div>
         </main>
 

@@ -5,7 +5,7 @@ export const seeds = [
     icon: '🍅',
     description: 'A juicy red tomato plant',
     price: 100000, // 0.0001 SOL in lamports
-    growthTime: 30,
+    growthTime: 3,
     reward: 0.0002
   },
   {
@@ -14,7 +14,7 @@ export const seeds = [
     icon: '🥕',
     description: 'A crunchy orange carrot',
     price: 200000, // 0.0002 SOL in lamports
-    growthTime: 45,
+    growthTime: 5,
     reward: 0.0003
   },
   {

@@ -12,9 +12,11 @@ const Header = () => {
         <nav className="game-nav">
           <div className="nav-links">
             <Link to="/" className="pixel-button">HOME</Link>
-            <Link to="/join" className="pixel-button">JOIN</Link>
+            {/* <span className="pixel-button disabled">PLAY</span> */}
+            <Link to="/join" className="pixel-button">PLAY</Link>
             <Link to="/whitepaper" className="pixel-button">WHITEPAPER</Link>
             <Link to="/about" className="pixel-button">ABOUT</Link>
+            <Link to="/demo" className="pixel-button">DEMO</Link>
           </div>
           <div className="nav-social">
             <a href="/twitter" className="pixel-icon" aria-label="Twitter">𝕏</a>

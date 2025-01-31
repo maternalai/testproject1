@@ -1,7 +1,9 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import NotFound from './components/NotFound/NotFound';
 import Garden from './components/Garden/Garden';
 import About from './components/About/About';
+import Demo from './components/Demo/Demo';
 import Whitepaper from './components/Whitepaper/Whitepaper';
 import Join from './components/Join/Join';
 import MusicPlayer from './components/MusicPlayer/MusicPlayer';
@@ -9,6 +11,7 @@ import './App.css';
 import { WalletProvider } from './context/WalletContext';
 import { ErrorBoundary } from 'react-error-boundary';
 import { GameProvider } from './context/GameContext';
+import Login from './components/Login/Login';
 
 function ErrorFallback({error}) {
   // Jika error dari ekstensi Chrome, jangan tampilkan apa-apa
@@ -35,6 +38,9 @@ function App() {
               <Route path="/about" element={<About />} />
               <Route path="/whitepaper" element={<Whitepaper />} />
               <Route path="/join" element={<Join />} />
+              <Route path="/demo" element={<Demo />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
             <MusicPlayer />
           </Router>
