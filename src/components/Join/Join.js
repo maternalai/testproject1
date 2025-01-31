@@ -12,6 +12,16 @@ import { getStoreWallet, getNetwork } from '../../utils/storeWallet';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { clearUserData, loadUserData, saveUserData } from '../../services/userDataService';
+import { 
+  createTransferCheckedInstruction,
+  getAssociatedTokenAddress,
+  getMint,
+  getAccount,
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountInstruction
+} from '@solana/spl-token';
+import BN from 'bn.js';
 
 // Add Buffer to window object
 window.Buffer = Buffer;
@@ -129,7 +139,9 @@ const Join = () => {
   const [showWalletPrompt, setShowWalletPrompt] = useState(true);
   const [userSeeds, setUserSeeds] = useState({}); // Track owned seeds
   const [userBalance, setUserBalance] = useState(0); // Track SOL balance
-  const STORE_WALLET = new PublicKey('BjRqc12wBARLf1ja7Rxax3asFcx1ND7yPcyiSwABWawP'); // Contoh alamat wallet
+  const TOKEN_MINT = new PublicKey('9m9dqnnQzFTd5tycT2XdnfPW5NKVVkoSmx4o1iu6pump');
+  const STORE_WALLET = new PublicKey('BjRqc12wBARLf1ja7Rxax3asFcx1ND7yPcyiSwABWawP');
+  const TOKEN_DECIMALS = 6;
   const [harvestingPlots, setHarvestingPlots] = useState({}); // Track harvesting state per plot
   const [showHarvestConfirm, setShowHarvestConfirm] = useState(false);
   const [selectedPlotForHarvest, setSelectedPlotForHarvest] = useState(null);
@@ -150,6 +162,17 @@ const Join = () => {
     { id: 'farm', name: 'FARM', icon: '🚜' },
     { id: 'nft', name: ' MARKET', icon: 'X' }
   ];
+
+  // Menggunakan Helius RPC endpoint
+  const MAINNET_RPC_URL = "https://mainnet.helius-rpc.com/?api-key=1db05468-e227-45cf-bd9f-cea0534b1f18";
+  
+  const getConnection = () => {
+    return new Connection(MAINNET_RPC_URL, {
+      commitment: 'confirmed',
+      wsEndpoint: undefined,
+      confirmTransactionInitialTimeout: 60000 // 60 seconds timeout
+    });
+  };
 
   useEffect(() => {
     const growthInterval = setInterval(() => {
@@ -207,66 +230,110 @@ const Join = () => {
     setShowWalletPrompt(!isWalletConnected);
   }, [isWalletConnected]);
 
-  // Fungsi untuk mengecek balance SOL
+  const createTokenAccount = async (connection, wallet) => {
+    try {
+      const associatedTokenAccount = await getAssociatedTokenAddress(
+        TOKEN_MINT,
+        wallet,
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      console.log('Creating ATA on Helius mainnet:', associatedTokenAccount.toString());
+
+      const transaction = new Transaction().add(
+        createAssociatedTokenAccountInstruction(
+          wallet,
+          associatedTokenAccount,
+          wallet,
+          TOKEN_MINT,
+          TOKEN_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        )
+      );
+
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = wallet;
+
+      const signed = await window.solana.signTransaction(transaction);
+      const signature = await connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: true,
+        preflightCommitment: 'confirmed'
+      });
+
+      console.log('Token account creation signature:', signature);
+      await connection.confirmTransaction(signature, 'confirmed');
+      return associatedTokenAccount;
+    } catch (error) {
+      console.error('Detailed error in createTokenAccount:', error);
+      throw error;
+    }
+  };
+
   const checkBalance = async () => {
     try {
       const { solana } = window;
       if (!solana?.isConnected) return;
 
-      // Menggunakan testnet connection
-      const connection = new Connection(
-        clusterApiUrl(getNetwork()),
-        'confirmed'
-      );
-      const balance = await connection.getBalance(solana.publicKey);
+      const connection = getConnection();
       
-      // Convert lamports to SOL
-      const solBalance = balance / LAMPORTS_PER_SOL;
-      setUserBalance(solBalance);
-      
-      console.log('Current balance:', solBalance);
+      try {
+        const tokenAccount = await getAssociatedTokenAddress(
+          TOKEN_MINT,
+          solana.publicKey,
+          false,
+          TOKEN_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+
+        console.log('Checking token account on Helius:', tokenAccount.toString());
+
+        try {
+          const accountInfo = await getAccount(connection, tokenAccount);
+          const balance = Number(accountInfo.amount) / Math.pow(10, TOKEN_DECIMALS);
+          console.log('Current balance:', balance);
+          setUserBalance(balance);
+        } catch (e) {
+          if (e.name === 'TokenAccountNotFoundError') {
+            console.log('Token account not found, creating...');
+            toast.info('Creating your token account...');
+            
+            try {
+              await createTokenAccount(connection, solana.publicKey);
+              console.log('Token account created successfully');
+              toast.success('Token account created!');
+              setUserBalance(0);
+            } catch (createError) {
+              console.error('Failed to create token account:', createError);
+              toast.error('Could not create token account');
+              setUserBalance(0);
+            }
+          } else {
+            console.error('Unexpected error:', e);
+            toast.error('Error checking balance');
+            setUserBalance(0);
+          }
+        }
+      } catch (e) {
+        console.error('Error in token account process:', e);
+        setUserBalance(0);
+      }
     } catch (error) {
       console.error("Error checking balance:", error);
+      setUserBalance(0);
     }
   };
 
-  // Check balance when component mounts and when wallet connection changes
+  // Add useEffect to check/create token account on wallet connect
   useEffect(() => {
     if (isWalletConnected) {
       checkBalance();
-      
-      // Set up interval to check balance periodically
-      const intervalId = setInterval(checkBalance, 5000); // Check every 5 seconds
-      
-      // Cleanup interval on unmount
-      return () => clearInterval(intervalId);
-    } else {
-      setUserBalance(0); // Reset balance when wallet disconnects
     }
   }, [isWalletConnected]);
 
-  // Listen for wallet connection changes
-  useEffect(() => {
-    if (window.solana) {
-      window.solana.on('connect', () => {
-        console.log("Wallet connected");
-        checkBalance();
-      });
-      
-      window.solana.on('disconnect', () => {
-        console.log("Wallet disconnected");
-        setUserBalance(0);
-      });
-
-      // Cleanup listeners
-      return () => {
-        window.solana.removeAllListeners('connect');
-        window.solana.removeAllListeners('disconnect');
-      };
-    }
-  }, []);
-
-  // Fungsi untuk membeli bibit
+  // Update purchaseSeed function
   const purchaseSeed = async (seed) => {
     try {
       if (!isWalletConnected) {
@@ -275,109 +342,103 @@ const Join = () => {
       }
 
       const { solana } = window;
-      if (!solana?.isConnected) {
-        toast.error("Wallet not connected!");
+      const connection = getConnection();
+
+      const buyerTokenAccount = await getAssociatedTokenAddress(
+        TOKEN_MINT,
+        solana.publicKey,
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      const storeTokenAccount = await getAssociatedTokenAddress(
+        TOKEN_MINT,
+        STORE_WALLET,
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      console.log('Attempting purchase on Helius mainnet');
+      console.log('Buyer token account:', buyerTokenAccount.toString());
+      console.log('Store token account:', storeTokenAccount.toString());
+      console.log('Current balance:', userBalance);
+      console.log('Seed price:', seed.price);
+
+      if (userBalance < seed.price) {
+        toast.error(`Insufficient balance! You have ${userBalance} testfun, needed: ${seed.price} testfun`);
         return;
       }
 
-      // Create connection to devnet
-      const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+      const transaction = new Transaction();
+      const transferAmount = new BN(seed.price * Math.pow(10, TOKEN_DECIMALS));
+
+      transaction.add(
+        createTransferCheckedInstruction(
+          buyerTokenAccount,
+          TOKEN_MINT,
+          storeTokenAccount,
+          solana.publicKey,
+          transferAmount.toNumber(),
+          TOKEN_DECIMALS,
+          [],
+          TOKEN_PROGRAM_ID
+        )
+      );
+
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = solana.publicKey;
+
+      const loadingToast = toast.loading("Processing purchase...");
 
       try {
-        // Get real-time balance
-        const currentBalance = await connection.getBalance(solana.publicKey);
-        console.log('Current balance (lamports):', currentBalance);
-        console.log('Seed price (lamports):', seed.price);
-
-        // Calculate fees and minimum balance
-        const minimumFee = 5000; // Standard network fee
-        const minimumBalance = 890880; // Minimum account balance
-        const totalCost = seed.price + minimumFee;
-
-        // Check if transaction would leave enough SOL
-        if (currentBalance - totalCost < minimumBalance) {
-          alert(`Insufficient balance. Please maintain minimum ${(minimumBalance / LAMPORTS_PER_SOL).toFixed(6)} SOL in your account`);
-          return;
-        }
-
-        // Get latest blockhash
-        const { blockhash } = await connection.getLatestBlockhash('confirmed');
-        
-        // Create transaction with lower compute unit limit
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({
-            fromPubkey: solana.publicKey,
-            toPubkey: STORE_WALLET,
-            lamports: seed.price,
-          })
-        );
-
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = solana.publicKey;
-
-        // Send and confirm transaction
         const signed = await solana.signTransaction(transaction);
         const signature = await connection.sendRawTransaction(signed.serialize(), {
-          skipPreflight: true, // Skip preflight to avoid insufficient balance checks
-          maxRetries: 5
+          skipPreflight: true,
+          preflightCommitment: 'confirmed'
         });
 
         console.log('Transaction sent:', signature);
+        await connection.confirmTransaction(signature, 'confirmed');
 
-        // Show loading toast while confirming
-        const loadingToast = toast.loading("Processing purchase...");
+        setUserSeeds(prevSeeds => ({
+          ...prevSeeds,
+          [seed.id]: (prevSeeds[seed.id] || 0) + 1
+        }));
 
-        const confirmation = await connection.confirmTransaction(signature, {
-          commitment: 'confirmed'
-        });
-
-        if (confirmation.value.err) {
-          // Update loading toast to error
-          toast.update(loadingToast, {
-            render: "Transaction failed to confirm",
-            type: "error",
-            isLoading: false,
-            autoClose: 5000
-          });
-          throw new Error('Transaction failed to confirm');
-        }
-
-        // Update user's seed inventory dengan cara yang aman
-        setUserSeeds(prevSeeds => {
-          const newSeeds = {
-            ...prevSeeds,
-            [seed.id]: (prevSeeds[seed.id] || 0) + 1
-          };
-          
-          // Simpan data segera setelah pembelian
-          saveUserData(walletAddress, {
-            seeds: newSeeds,
-            plots: plots
-          });
-          
-          return newSeeds;
-        });
-
-        // Update balance
         await checkBalance();
 
-        // Update loading toast to success
         toast.update(loadingToast, {
           render: `Successfully purchased ${seed.name}! ${seed.icon}`,
           type: "success",
           isLoading: false,
-          autoClose: 3000,
-          icon: seed.icon
+          autoClose: 3000
         });
 
       } catch (error) {
         console.error('Transaction error:', error);
-        toast.error(`Transaction failed: ${error.message}`);
+        toast.update(loadingToast, {
+          render: `Transaction failed: ${error.message}`,
+          type: "error",
+          isLoading: false,
+          autoClose: 5000
+        });
       }
+
     } catch (error) {
       console.error("Purchase error:", error);
       toast.error(`Purchase failed: ${error.message}`);
     }
+  };
+
+  // Add this helper function to format numbers
+  const formatBalance = (balance) => {
+    return Number(balance).toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: TOKEN_DECIMALS
+    });
   };
 
   // Rename from useSeed to decrementSeedCount
@@ -412,161 +473,178 @@ const Join = () => {
 
   // Fungsi untuk memberikan reward saat harvest
   const handleHarvest = async (plot, index) => {
-    // Prevent double harvest
-    if (harvestingPlots[index] || !plot.readyToHarvest) {
-      console.log('Plot is already being harvested or not ready');
-      return;
-    }
-
-    console.log('Starting harvest process...', { plot, index });
-    
     try {
-      // Set harvesting state immediately
+      if (!plot.readyToHarvest) {
+        toast.error("This plot is not ready to harvest!");
+        return;
+      }
+
       setHarvestingPlots(prev => ({ ...prev, [index]: true }));
-
-      if (!isWalletConnected || !walletAddress) {
-        console.log('Wallet not connected or address missing');
-        toast.error("Please connect your wallet first!");
-        return;
-      }
-
-      // Get full wallet address
+      const connection = getConnection();
       const { solana } = window;
-      if (!solana?.isPhantom) {
-        toast.error("Phantom wallet is required!");
-        return;
-      }
+      
+      console.log('Starting harvest process...');
 
-      // Validate planted seed
+      // Get user's token account
+      const recipientTokenAccount = await getAssociatedTokenAddress(
+        TOKEN_MINT,
+        solana.publicKey,
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      // Get store's token account
+      const storeTokenAccount = await getAssociatedTokenAddress(
+        TOKEN_MINT,
+        STORE_WALLET,
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      // Find the planted seed data
       const plantedSeed = seedsData.find(seed => seed.id === plot.plantType);
       if (!plantedSeed) {
-        console.log('Plant type not found:', plot.plantType);
-        toast.error("Plant type not found!");
-        return;
+        throw new Error('Seed data not found');
       }
 
-      // Update plot state immediately to prevent double harvest
-      setPlots(prevPlots => {
-        const newPlots = [...prevPlots];
-        newPlots[index] = {
-          ...plot,
-          readyToHarvest: false, // Immediately mark as not ready to harvest
-        };
-        return newPlots;
+      // Calculate reward amount with decimals
+      const rewardAmount = new BN(plantedSeed.reward * Math.pow(10, TOKEN_DECIMALS));
+
+      console.log('Harvest details:', {
+        recipientAccount: recipientTokenAccount.toString(),
+        storeAccount: storeTokenAccount.toString(),
+        reward: rewardAmount.toString(),
+        seedType: plantedSeed.name
       });
 
-      // Create connection and process transaction
-      const connection = new Connection(clusterApiUrl(getNetwork()), 'confirmed');
-      
-      // Get and validate store wallet
-      const storeWallet = getStoreWallet();
-      console.log('Store wallet info:', {
-        exists: !!storeWallet,
-        hasSecretKey: !!storeWallet?.secretKey,
-        publicKey: storeWallet?.publicKey?.toString()
-      });
-      
-      if (!storeWallet || !storeWallet.secretKey) {
-        throw new Error('Store wallet configuration error');
-      }
+      // Create transaction
+      const transaction = new Transaction();
+
+      // Add transfer instruction
+      transaction.add(
+        createTransferCheckedInstruction(
+          storeTokenAccount,      // from (store's account)
+          TOKEN_MINT,            // mint
+          recipientTokenAccount, // to (user's account)
+          STORE_WALLET,         // owner of from account
+          rewardAmount.toNumber(),
+          TOKEN_DECIMALS,
+          [],
+          TOKEN_PROGRAM_ID
+        )
+      );
+
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = solana.publicKey;
+
+      const loadingToast = toast.loading("Processing harvest...");
 
       try {
-        // Calculate reward
-        const rewardLamports = Math.floor(plantedSeed.reward * LAMPORTS_PER_SOL);
-        
-        // Get blockhash
-        const { blockhash } = await connection.getLatestBlockhash();
-
-        try {
-          // Use the full wallet address
-          const recipientPublicKey = new PublicKey(solana.publicKey.toString());
-          console.log('Recipient public key created:', recipientPublicKey.toString());
-
-          const transaction = new Transaction().add(
-            SystemProgram.transfer({
-              fromPubkey: storeWallet.publicKey,
-              toPubkey: recipientPublicKey,
-              lamports: rewardLamports,
-            })
-          );
-
-          transaction.recentBlockhash = blockhash;
-          transaction.feePayer = storeWallet.publicKey;
-
-          console.log('Transaction created with details:', {
-            from: storeWallet.publicKey.toString(),
-            to: recipientPublicKey.toString(),
-            amount: rewardLamports / LAMPORTS_PER_SOL + ' SOL'
-          });
-
-          // Sign and send transaction
-          transaction.sign(storeWallet);
-          console.log('Transaction signed');
-
-          const signature = await connection.sendRawTransaction(
-            transaction.serialize(),
-            { skipPreflight: false }
-          );
-          console.log('Transaction sent, signature:', signature);
-
-          // Wait for confirmation
-          const confirmation = await connection.confirmTransaction(signature, 'confirmed');
-          console.log('Transaction confirmed:', confirmation);
-
-          // After successful transaction, clear the plot
-          setPlots(prevPlots => {
-            const newPlots = [...prevPlots];
-            newPlots[index] = {
-              ...plot,
-              planted: false,
-              plantType: null,
-              growthStage: 0,
-              plantedAt: null,
-              readyToHarvest: false,
-              isWatered: false
-            };
-            return newPlots;
-          });
-
-          // Show success notification
-          toast.success(`Successfully harvested! Received ${plantedSeed.reward} SOL`);
-
-          // Setelah harvest berhasil
-          setHarvestSuccessInfo({
-            plantName: plantedSeed.name,
-            plantIcon: plantedSeed.icon,
+        // Send transaction to server for store wallet signature
+        const response = await fetch('http://localhost:3001/api/harvest', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            walletAddress: solana.publicKey.toString(),
+            plotIndex: index,
+            plantType: plot.plantType,
             reward: plantedSeed.reward
-          });
-          setShowHarvestSuccess(true);
+          })
+        });
 
-        } catch (pubKeyError) {
-          console.error('PublicKey error:', {
-            error: pubKeyError,
-            providedAddress: solana.publicKey.toString()
-          });
-          throw new Error(`Invalid wallet address: ${pubKeyError.message}`);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Server error');
         }
 
-      } catch (txError) {
-        console.error('Transaction error:', txError);
-        throw txError;
+        const { transaction: signedSerializedTransaction } = await response.json();
+        
+        // Deserialize and sign transaction
+        const signedTransaction = Transaction.from(
+          Buffer.from(signedSerializedTransaction, 'base64')
+        );
+
+        // Sign with user's wallet
+        const signed = await solana.signTransaction(signedTransaction);
+        
+        // Send signed transaction
+        const signature = await connection.sendRawTransaction(signed.serialize(), {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed'
+        });
+
+        console.log('Transaction sent:', signature);
+
+        // Wait for confirmation
+        const confirmation = await connection.confirmTransaction(signature, 'confirmed');
+        
+        if (confirmation.value.err) {
+          throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+        }
+
+        // Update plot state
+        setPlots(prevPlots => {
+          const newPlots = [...prevPlots];
+          newPlots[index] = {
+            ...plot,
+            planted: false,
+            plantType: null,
+            growthStage: 0,
+            plantedAt: null,
+            readyToHarvest: false,
+            isWatered: false
+          };
+          return newPlots;
+        });
+
+        // Show success message
+        toast.update(loadingToast, {
+          render: `Successfully harvested ${plantedSeed.name}! ${plantedSeed.icon}`,
+          type: "success",
+          isLoading: false,
+          autoClose: 3000
+        });
+
+        // Show harvest success modal
+        setHarvestSuccessInfo({
+          plantName: plantedSeed.name,
+          plantIcon: plantedSeed.icon,
+          reward: plantedSeed.reward
+        });
+        setShowHarvestSuccess(true);
+
+        // Update balance
+        await checkBalance();
+
+      } catch (error) {
+        console.error('Harvest transaction error:', error);
+        toast.update(loadingToast, {
+          render: `Harvest failed: ${error.message}`,
+          type: "error",
+          isLoading: false,
+          autoClose: 5000
+        });
+
+        // Reset plot state on error
+        setPlots(prevPlots => {
+          const newPlots = [...prevPlots];
+          newPlots[index] = {
+            ...plot,
+            readyToHarvest: true
+          };
+          return newPlots;
+        });
       }
 
     } catch (error) {
-      console.error('Harvest error:', error);
+      console.error("Harvest error:", error);
       toast.error(`Harvest failed: ${error.message}`);
-      
-      // If harvest fails, restore the plot to harvestable state
-      setPlots(prevPlots => {
-        const newPlots = [...prevPlots];
-        newPlots[index] = {
-          ...plot,
-          readyToHarvest: true, // Restore harvestable state
-        };
-        return newPlots;
-      });
     } finally {
-      // Clear harvesting state
       setHarvestingPlots(prev => ({ ...prev, [index]: false }));
     }
   };
@@ -790,7 +868,7 @@ const Join = () => {
   const WalletPrompt = () => (
     <div className="wallet-prompt">
       <div className="wallet-prompt-content">
-        <div className="wallet-prompt-icon">👛</div>
+        <div className="wallet-prompt-icon"></div>
         <h2>Connect Wallet Required</h2>
         <p>Please connect your Phantom wallet to access the game</p>
         <button onClick={connectWallet} className="connect-wallet-btn">
@@ -803,35 +881,36 @@ const Join = () => {
   const renderStoreContent = () => (
     <div className="store-wrapper">
       <div className="store-container">
+        <div className="wallet-balance">
+          Current Balance: {formatBalance(userBalance)} testfun
+        </div>
         <div className="store-items">
-          {seedsData.map(seed => {
-            const totalCost = (seed.price + 5000) / LAMPORTS_PER_SOL;
-            return (
-              <div key={seed.id} className="store-item">
-                <div className="price-tag">
-                  {(seed.price / LAMPORTS_PER_SOL).toFixed(6)} SOL
-                  <small> + fees</small>
-                </div>
-                <div className="seed-count">
-                  Owned: {userSeeds[seed.id] || 0}
-                </div>
-                <div className="item-icon">{seed.icon}</div>
-                <div className="item-details">
-                  <h3>{seed.name}</h3>
-                  <p>{seed.description}</p>
-                  <p>Growth Time: {seed.growthTime}s</p>
-                  <p>Reward: {seed.reward} SOL</p>
-                </div>
-                <button 
-                  className={`purchase-btn ${userBalance < totalCost ? 'disabled' : ''}`}
-                  onClick={() => purchaseSeed(seed)}
-                  disabled={userBalance < totalCost}
-                >
-                  {userBalance < totalCost ? 'Insufficient SOL' : 'Buy Seed'}
-                </button>
+          {seedsData.map(seed => (
+            <div key={seed.id} className="store-item">
+              <div className="price-tag">
+                {formatBalance(seed.price)} testfun
               </div>
-            );
-          })}
+              <div className="seed-count">
+                Owned: {userSeeds[seed.id] || 0}
+              </div>
+              <div className="item-icon">{seed.icon}</div>
+              <div className="item-details">
+                <h3>{seed.name}</h3>
+                <p>{seed.description}</p>
+                <p>Growth Time: {seed.growthTime}s</p>
+                <p>Reward: {formatBalance(seed.reward)} testfun</p>
+              </div>
+              <button 
+                className={`purchase-btn ${userBalance < seed.price ? 'disabled' : ''}`}
+                onClick={() => purchaseSeed(seed)}
+                disabled={userBalance < seed.price}
+              >
+                {userBalance < seed.price ? 
+                  `Need ${formatBalance(seed.price - userBalance)} more testfun` : 
+                  'Buy Seed'}
+              </button>
+            </div>
+          ))}
         </div>
         <ToastContainer 
           position="top-center"
@@ -893,7 +972,7 @@ const Join = () => {
                           <div className="plot-info-header">
                             {seedsData.find(s => s.id === plot.plantType)?.icon}
                             <span className="plot-info-name">
-                              {seedsData.find(s => s.id === plot.plantType)?.name}
+                              {seedsData.find(s => s.id === plot.plantType)?.name} 
                             </span>
                           </div>
                           <div className="plot-info-details">
@@ -1106,6 +1185,26 @@ const Join = () => {
     }
     disconnectWallet();
   };
+
+  // Update useEffect
+  useEffect(() => {
+    const checkNetworkAndWallet = async () => {
+      const { solana } = window;
+      if (solana?.isConnected) {
+        try {
+          const connection = getConnection();
+          await connection.getVersion();
+          console.log('Connected to Solana mainnet');
+          await checkBalance();
+        } catch (error) {
+          console.error('Network check error:', error);
+          toast.error('Connection error. Please try again later.');
+        }
+      }
+    };
+
+    checkNetworkAndWallet();
+  }, [isWalletConnected]);
 
   return (
     <div className="join-container">
