@@ -1,7 +1,7 @@
 .game-header {
   width: 100%;
   padding: 20px;
-  background: linear-gradient(145deg, #000000, #654321);
+  background: linear-gradient(145deg, #994b01, #654321);
   border-bottom: 4px solid #FFD700;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
@@ -173,42 +173,68 @@
   width: auto;
 }
 
+.title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.game-logo {
+  width: 1250px;
+  height: 250px;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
 .pixel-button.disabled {
-  opacity: 0.5;
+  background: #5a5a5a !important;
+  color: #999999 !important;
+  border: 3px solid #777777;
   cursor: not-allowed;
-  background: #666;
-  color: #999;
-  border-color: #444;
+  opacity: 0.7;
+  box-shadow: 
+    inset -4px -4px 0 0 #444444,
+    inset 4px 4px 0 0 #666666;
   pointer-events: none;
-  text-decoration: none;
   position: relative;
-}
-
-.pixel-button.disabled::after {
-  content: "Coming Soon";
-  position: absolute;
-  bottom: -30px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.8);
-  color: #fff;
-  padding: 5px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-  white-space: nowrap;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-}
-
-.pixel-button.disabled:hover::after {
-  opacity: 1;
 }
 
 .pixel-button.disabled:hover {
   transform: none;
-  box-shadow: none;
-  background: #666;
+  background: #5a5a5a !important;
+  color: #999999 !important;
+  box-shadow: 
+    inset -4px -4px 0 0 #444444,
+    inset 4px 4px 0 0 #666666;
+}
+
+.pixel-button.disabled::after {
+  content: "COMING SOON";
+  position: absolute;
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  color: #FFD700;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #000;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 

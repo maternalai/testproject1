@@ -202,13 +202,16 @@
 }
 
 /* Base Container Styles */
-.join-container {
+.demo-container {
   min-height: 100vh;
   background: linear-gradient(180deg, #87CEEB 0%, #98FB98 100%);
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  background-image: url('../../assets/bg1.jpg');
+  background-position: center;
+
 }
 
 /* Tools Navigation */
@@ -220,6 +223,7 @@
   padding: 10px 0;
   z-index: 100;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  
 }
 
 .tools-bar {
@@ -283,10 +287,15 @@
     padding: 20px;
     
     /* Appearance */
-    background: rgba(0, 0, 0, 0.95);
+    background: #654321;
     border: 4px solid #FFD700;
     border-radius: 8px;
     box-shadow: inset 0 0 20px rgba(255, 215, 0, 0.3);   
+}
+
+.store-wrapper {
+  background-image: url('../../assets/bg1.jpg');
+  background-position: center;
 }
 
 /* Store Items Grid */
@@ -754,6 +763,7 @@
   max-width: 90%;
   width: 400px;
   margin: auto;
+  
 }
 
 .coming-soon-icon {
@@ -805,6 +815,7 @@
   .coming-soon-content {
     padding: 20px;
     width: 320px;
+    
   }
 }
 
@@ -899,11 +910,35 @@
 }
 
 .seed-price {
-  margin-left: auto;
+position: center;
   font-family: 'Press Start 2P', cursive;
   font-size: 10px;
   color: #FFD700;
 }
+
+.current-balance {
+    width: 100%;
+    color: #ffffff;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 12px;
+    text-align: center;
+  }
+  
+  .seed-count {
+    width: 100%;
+    color: #ffffff;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 12px;
+    text-align: center;
+  }
+  
+  .price-tag {
+    width: 100%;
+    color: #FFD700;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 12px;
+    text-align: center;
+  }
 
 /* Plot Effects */
 .plot.watered::before {
@@ -1358,7 +1393,7 @@
 
 
 .store-item {
-  background: rgba(0, 0, 0, 0.8);
+  background: #654321;
   border: 2px solid #FFD700;
   border-radius: 10px;
   padding: 15px;
@@ -1404,6 +1439,7 @@
   font-size: 12px;
   color: #FFD700;
   margin-left: 10px;
+  font-family: 'Press Start 2P', cursive;
 }
 
 .refresh-balance-btn {
@@ -1647,6 +1683,10 @@
     }
 }
 
+.wallet-prompt-devnet {
+    font-family: 'Press Start 2P', cursive;
+}
+
 /* Hover Effect */
 .plot:hover .plant-sprite {
     transform: translate(-50%, -50%) scale(1.15);
@@ -1678,373 +1718,8 @@
     .plot.growth-stage-3 .plant-sprite {
         font-size: 40px;
     }
-}
 
-/* Initial Screen Styles */
-.initial-screen {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: calc(100vh - 180px);
-  padding: 20px;
-  background-image: url('../../assets/bg1.jpg');
-  background-position: center;
-  background-size: cover;
-}
+   
 
-.initial-content {
-  background: rgba(0, 0, 0, 0.95);
-  border: 4px solid;
-  border-image: linear-gradient(45deg, #FFD700, #FFA500, #FF8C00) 1;
-  border-radius: 20px;
-  padding: 40px;
-  text-align: center;
-  max-width: 500px;
-  width: 90%;
-}
-
-.initial-content h1 {
-  color: #FFD700;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 24px;
-  margin-bottom: 20px;
-  text-shadow: 2px 2px 0 #000;
-}
-
-.initial-content p {
-  color: #FFFFFF;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 14px;
-  margin-bottom: 30px;
-  line-height: 1.5;
-}
-
-.initial-buttons {
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-}
-
-.pixel-button {
-  padding: 12px 24px;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 14px;
-  border: 3px solid #000;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.pixel-button.primary {
-  background: #FFD700;
-  color: #000;
-  box-shadow: 
-    inset -3px -3px 0 0 #B8860B,
-    inset 3px 3px 0 0 #FFF;
-}
-
-.pixel-button.secondary {
-  background: #4CAF50;
-  color: #FFF;
-  box-shadow: 
-    inset -3px -3px 0 0 #2E7D32,
-    inset 3px 3px 0 0 #81C784;
-}
-
-.pixel-button:hover {
-  transform: translateY(-2px);
-}
-
-.pixel-button:active {
-  transform: translateY(1px);
-}
-
-/* Responsive adjustments */
-@media (max-width: 480px) {
-  .initial-content {
-    padding: 30px;
-  }
-
-  .initial-content h1 {
-    font-size: 18px;
-  }
-
-  .initial-content p {
-    font-size: 12px;
-  }
-
-  .initial-buttons {
-    flex-direction: column;
-    gap: 15px;
-  }
-
-  .pixel-button {
-    font-size: 12px;
-    padding: 10px 20px;
-  }
-}
-
-/* Login Panel Styles */
-.login-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.login-panel {
-  background: #1a1a1a;
-  border: 4px solid #FFD700;
-  border-radius: 12px;
-  padding: 30px;
-  width: 90%;
-  max-width: 400px;
-  position: relative;
-  animation: panelSlideIn 0.3s ease;
-}
-
-.close-button {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: none;
-  border: none;
-  color: #FFD700;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 5px;
-}
-
-.login-panel h2 {
-  color: #FFD700;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 20px;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-group label {
-  display: block;
-  color: #FFF;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.form-group input {
-  width: 100%;
-  padding: 10px;
-  background: #2a2a2a;
-  border: 2px solid #FFD700;
-  border-radius: 4px;
-  color: #FFF;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 12px;
-}
-
-.error-message {
-  color: #ff4444;
-  font-size: 12px;
-  margin-bottom: 15px;
-  text-align: center;
-}
-
-.auth-switch {
-  margin-top: 20px;
-  text-align: center;
-}
-
-.auth-switch p {
-  color: #FFF;
-  font-size: 12px;
-  margin-bottom: 10px;
-}
-
-.switch-button {
-  background: none;
-  border: none;
-  color: #FFD700;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 12px;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-@keyframes panelSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Responsive adjustments */
-@media (max-width: 480px) {
-  .login-panel {
-    padding: 20px;
-  }
-
-  .login-panel h2 {
-    font-size: 16px;
-  }
-
-  .form-group label,
-  .form-group input {
-    font-size: 10px;
-  }
-}
-
-/* Social Follow Popup Styles */
-.social-follow-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  backdrop-filter: blur(5px);
-}
-
-.social-follow-popup {
-  background: #1a1a1a;
-  border: 4px solid #FFD700;
-  border-radius: 12px;
-  padding: 30px;
-  width: 90%;
-  max-width: 400px;
-  text-align: center;
-  position: relative;
-}
-
-.close-button {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: none;
-  border: none;
-  color: #FFD700;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 5px;
-}
-
-.social-follow-popup h2 {
-  color: #FFD700;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 24px;
-  margin-bottom: 20px;
-}
-
-.social-follow-popup p {
-  color: #fff;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 14px;
-  margin-bottom: 30px;
-}
-
-.social-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  margin-bottom: 30px;
-}
-
-.social-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px 20px;
-  background: #333;
-  border: 2px solid #FFD700;
-  border-radius: 8px;
-  color: #fff;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.social-button:hover {
-  background: #444;
-  transform: translateY(-2px);
-}
-
-.social-button.followed {
-  background: #1a472a;
-  border-color: #4CAF50;
-}
-
-.social-icon {
-  font-size: 20px;
-}
-
-.continue-button {
-  width: 100%;
-  padding: 15px;
-  background: #333;
-  border: 2px solid #FFD700;
-  border-radius: 8px;
-  color: #fff;
-  font-family: 'Press Start 2P', cursive;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.continue-button.active {
-  background: #FFD700;
-  color: #000;
-}
-
-.continue-button.active:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(255, 215, 0, 0.3);
-}
-
-.continue-button.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Responsive adjustments */
-@media (max-width: 480px) {
-  .social-follow-popup {
-    padding: 20px;
-  }
-
-  .social-follow-popup h2 {
-    font-size: 18px;
-  }
-
-  .social-follow-popup p {
-    font-size: 12px;
-  }
-
-  .social-button {
-    font-size: 12px;
-    padding: 10px 15px;
-  }
-
-  .continue-button {
-    font-size: 12px;
-    padding: 12px;
-  }
+    
 }

@@ -12,6 +12,8 @@ import bs58 from 'bs58';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import fs from 'fs/promises';
+import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -39,6 +41,33 @@ app.use((req, res, next) => {
 const MAINNET_RPC_URL = "https://mainnet.helius-rpc.com/?api-key=1db05468-e227-45cf-bd9f-cea0534b1f18";
 const TOKEN_MINT = new PublicKey('9m9dqnnQzFTd5tycT2XdnfPW5NKVVkoSmx4o1iu6pump');
 const TOKEN_DECIMALS = 6;
+const LEADERBOARD_FILE = path.join(__dirname, 'leaderboard.json');
+
+// Initialize leaderboard data structure
+let leaderboardData = new Map();
+
+// Add this function to manage leaderboard data
+const updateLeaderboard = async (walletAddress, harvestAmount) => {
+  if (!leaderboardData.has(walletAddress)) {
+    leaderboardData.set(walletAddress, {
+      walletAddress,
+      totalHarvests: 0,
+      totalRewards: 0
+    });
+  }
+
+  const userData = leaderboardData.get(walletAddress);
+  userData.totalHarvests += 1;
+  userData.totalRewards += harvestAmount;
+
+  // Save to file
+  try {
+    const dataToSave = Array.from(leaderboardData.values());
+    await fs.writeFile(LEADERBOARD_FILE, JSON.stringify(dataToSave, null, 2));
+  } catch (error) {
+    console.error('Error saving leaderboard:', error);
+  }
+};
 
 // Validate environment variables
 if (!process.env.STORE_WALLET_PRIVATE_KEY) {
@@ -62,6 +91,31 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Add this endpoint for getting leaderboard data
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    let data;
+    try {
+      const fileContent = await fs.readFile(LEADERBOARD_FILE, 'utf-8');
+      data = JSON.parse(fileContent);
+    } catch (error) {
+      // If file doesn't exist or is invalid, return empty array
+      data = [];
+    }
+
+    // Sort by total rewards in descending order
+    const sortedData = data.sort((a, b) => b.totalRewards - a.totalRewards);
+
+    res.json(sortedData);
+  } catch (error) {
+    console.error('Error fetching leaderboard:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch leaderboard data'
+    });
+  }
+});
+
 // Harvest endpoint
 app.post('/api/harvest', async (req, res) => {
   console.log('=== START HARVEST REQUEST ===');
@@ -78,9 +132,14 @@ app.post('/api/harvest', async (req, res) => {
       });
     }
 
+    // Update leaderboard with this harvest
+    await updateLeaderboard(walletAddress, reward);
+
+    console.log('Creating connection...');
     const connection = getConnection();
     const recipientWallet = new PublicKey(walletAddress);
     
+    console.log('Getting token accounts...');
     // Get token accounts
     const recipientTokenAccount = await getAssociatedTokenAddress(
       TOKEN_MINT,
@@ -98,10 +157,27 @@ app.post('/api/harvest', async (req, res) => {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
-    // Create and sign transaction
+    console.log('Token accounts:', {
+      recipient: recipientTokenAccount.toString(),
+      store: storeTokenAccount.toString()
+    });
+
+    // Check store token balance
+    const storeAccount = await getAccount(connection, storeTokenAccount);
+    console.log('Store token balance:', storeAccount.amount.toString());
+
+    // Create transaction
+    console.log('Creating transaction...');
     const transaction = new Transaction();
     const rewardAmount = Math.floor(reward * Math.pow(10, TOKEN_DECIMALS));
 
+    console.log('Adding transfer instruction...', {
+      amount: rewardAmount,
+      from: storeTokenAccount.toString(),
+      to: recipientTokenAccount.toString()
+    });
+
+    // Add transfer instruction
     transaction.add(
       createTransferCheckedInstruction(
         storeTokenAccount,
@@ -115,11 +191,19 @@ app.post('/api/harvest', async (req, res) => {
       )
     );
 
-    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    // Get latest blockhash
+    console.log('Getting latest blockhash...');
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = blockhash;
+    transaction.lastValidBlockHeight = lastValidBlockHeight;
     transaction.feePayer = recipientWallet;
-    transaction.sign(storeWalletKeypair);
 
+    console.log('Signing transaction with store wallet...');
+    // Partially sign with store wallet
+    transaction.partialSign(storeWalletKeypair);
+
+    console.log('Serializing transaction...');
+    // Serialize the transaction
     const serializedTransaction = transaction.serialize({
       requireAllSignatures: false
     }).toString('base64');
@@ -127,14 +211,22 @@ app.post('/api/harvest', async (req, res) => {
     console.log('Transaction ready for client signing');
     res.json({
       success: true,
-      transaction: serializedTransaction
+      transaction: serializedTransaction,
+      message: 'Transaction created successfully',
+      debug: {
+        rewardAmount,
+        recipientAccount: recipientTokenAccount.toString(),
+        storeAccount: storeTokenAccount.toString(),
+        blockhash
+      }
     });
 
   } catch (error) {
     console.error('Harvest error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
   }
   console.log('=== END HARVEST REQUEST ===');

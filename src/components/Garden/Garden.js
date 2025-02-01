@@ -17,7 +17,7 @@ const FEATURES = [
   {
     id: 1,
     title: "Farming System",
-    description: "Plant, water, and harvest your crops in our unique pixel art environment. Each plant is an NFT with special traits.",
+    description: "Plant, water, and harvest your crops in our unique pixel art environment. ",
     icon: farmingIcon,
     altText: "Pixel art of farming tools and plants"
   },
@@ -129,60 +129,17 @@ const ROADMAP_ITEMS = [
       "Game Universe Expansion",
       "Mobile Version"
     ],
-    status: "upcoming"
+    status: "upcoming"  
   }
 ];
 
-const TOKENOMICS_DATA = [
-  {
-    id: 1,
-    title: "Play to Earn",
-    percentage: "30%",
-    description: "Rewards for active players and community events",
-    icon: "🎮"
-  },
-  {
-    id: 2,
-    title: "Liquidity Pool",
-    percentage: "25%",
-    description: "Ensuring stable trading and market depth",
-    icon: "💧"
-  },
-  {
-    id: 3,
-    title: "Development",
-    percentage: "20%",
-    description: "Continuous game development and updates",
-    icon: "⚙️"
-  },
-  {
-    id: 4,
-    title: "Team & Advisors",
-    percentage: "10%",
-    description: "Core team and strategic advisors",
-    icon: "👥"
-  },
-  {
-    id: 5,
-    title: "Marketing",
-    percentage: "10%",
-    description: "Growth and community building initiatives",
-    icon: "📢"
-  },
-  {
-    id: 6,
-    title: "Reserve",
-    percentage: "5%",
-    description: "Emergency fund and future opportunities",
-    icon: "🏦"
-  }
-];
+
 
 const Garden = () => {
   const navigate = useNavigate();
 
   const handleConnectWallet = () => {
-    navigate('/join');
+    navigate('/demo');
   };
 
   return (
@@ -191,9 +148,9 @@ const Garden = () => {
       <div className="content-wrapper">
         {/* Welcome Section */}
         <main className="content-container welcome-section">
-          <h1 className="section-title">Welcome to Solana Garden</h1>
+          <h1 className="section-title">Welcome to Farm Fun</h1>
           <p className="section-text">
-            Start your journey in the world of blockchain gardening. Plant, grow, and trade unique pixel plants as NFTs.
+            Start your journey in the world of blockchain gardening. Plant, grow, and harvest your crops.
           </p>
           <div className="cta-buttons">
             <button 
@@ -244,29 +201,6 @@ const Garden = () => {
                     </li>
                   ))}
                 </ul>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Tokenomics Section */}
-        <section className="content-container tokenomics-section">
-          <h2 className="section-title">Tokenomics</h2>
-          <div className="tokenomics-grid">
-            {TOKENOMICS_DATA.map((item) => (
-              <div key={item.id} className="tokenomics-item">
-                <div className="tokenomics-icon">{item.icon}</div>
-                <div className="tokenomics-content">
-                  <h4>{item.title}</h4>
-                  <div className="percentage-bar">
-                    <div 
-                      className="percentage-fill"
-                      style={{ width: item.percentage }}
-                    ></div>
-                    <span className="percentage-text">{item.percentage}</span>
-                  </div>
-                  <p>{item.description}</p>
-                </div>
               </div>
             ))}
           </div>

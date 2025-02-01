@@ -6,7 +6,7 @@ export const seeds = [
     description: 'Medium growth time with good reward',
     price: 1000, // 2,000 testfun tokens
     reward: 1500, // 3,000 testfun tokens
-    growthTime: 5
+    growthTime: 7200
   },
   {
     id: 'potato',
@@ -15,16 +15,16 @@ export const seeds = [
     description: 'Longer growth but higher reward',
     price: 2000, // 5,000 testfun tokens
     reward: 2500, // 8,000 testfun tokens
-    growthTime: 10
+    growthTime: 3
   },
   {
     id: 'tomato',
     name: 'Tomato',
     icon: '🍅',
     description: 'A juicy red tomato plant',
-    price: 15000, // 0.0001 SOL in lamports
-    growthTime: 3,
-    reward: 16500
+    price: 1000, // 0.0001 SOL in lamports
+    growthTime: 360,
+    reward: 1500
   },
   {
     id: 'carrot',
@@ -33,7 +33,7 @@ export const seeds = [
     description: 'A crunchy orange carrot',
     price: 1500, // 0.0002 SOL in lamports
     growthTime: 5,
-    reward: 5000
+    reward: 2000
   },
   {
     id: 'eggplant',

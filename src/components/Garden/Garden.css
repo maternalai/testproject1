@@ -1104,3 +1104,23 @@
     font-size: 14px;
   }
 }
+
+.garden-area {
+  padding: 20px;
+  min-height: calc(100vh - 100px);
+}
+
+.plots-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  position: relative;
+}
+
+.plots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 15px;
+  padding: 20px;
+  position: relative;
+}

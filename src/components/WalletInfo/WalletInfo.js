@@ -10,7 +10,7 @@ const WalletInfo = ({ walletAddress, onDisconnect }) => {
 
   return (
     <div className="wallet-info">
-      <div className="wallet-address">
+      <div className="wallet-address2">
         <span className="wallet-icon">👛</span>
         {formatAddress(walletAddress)}
       </div>

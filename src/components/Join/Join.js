@@ -334,7 +334,10 @@ const Join = () => {
   }, [isWalletConnected]);
 
   // Update purchaseSeed function
-  const purchaseSeed = async (seed) => {
+  const purchaseSeed = async (seedWithQuantity) => {
+    const { quantity, ...seed } = seedWithQuantity;
+    const totalPrice = seed.price * quantity;
+
     try {
       if (!isWalletConnected) {
         toast.error("Please connect your wallet first!");
@@ -364,15 +367,16 @@ const Join = () => {
       console.log('Buyer token account:', buyerTokenAccount.toString());
       console.log('Store token account:', storeTokenAccount.toString());
       console.log('Current balance:', userBalance);
-      console.log('Seed price:', seed.price);
+      console.log('Total price:', totalPrice);
+      console.log('Quantity:', quantity);
 
-      if (userBalance < seed.price) {
-        toast.error(`Insufficient balance! You have ${userBalance} testfun, needed: ${seed.price} testfun`);
+      if (userBalance < totalPrice) {
+        toast.error(`Insufficient balance! You have ${formatBalance(userBalance)} testfun, needed: ${formatBalance(totalPrice)} testfun`);
         return;
       }
 
       const transaction = new Transaction();
-      const transferAmount = new BN(seed.price * Math.pow(10, TOKEN_DECIMALS));
+      const transferAmount = new BN(totalPrice * Math.pow(10, TOKEN_DECIMALS));
 
       transaction.add(
         createTransferCheckedInstruction(
@@ -405,13 +409,13 @@ const Join = () => {
 
         setUserSeeds(prevSeeds => ({
           ...prevSeeds,
-          [seed.id]: (prevSeeds[seed.id] || 0) + 1
+          [seed.id]: (prevSeeds[seed.id] || 0) + quantity
         }));
 
         await checkBalance();
 
         toast.update(loadingToast, {
-          render: `Successfully purchased ${seed.name}! ${seed.icon}`,
+          render: `Successfully purchased ${quantity} ${seed.name}${quantity > 1 ? 's' : ''}! ${seed.icon}`,
           type: "success",
           isLoading: false,
           autoClose: 3000
@@ -438,24 +442,6 @@ const Join = () => {
     return Number(balance).toLocaleString('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: TOKEN_DECIMALS
-    });
-  };
-
-  // Rename from useSeed to decrementSeedCount
-  const decrementSeedCount = (seedId) => {
-    setUserSeeds(prevSeeds => {
-      const newSeeds = {
-        ...prevSeeds,
-        [seedId]: Math.max(0, (prevSeeds[seedId] || 0) - 1)
-      };
-      
-      // Simpan data segera setelah pengurangan
-      saveUserData(walletAddress, {
-        seeds: newSeeds,
-        plots: plots
-      });
-      
-      return newSeeds;
     });
   };
 
@@ -649,19 +635,92 @@ const Join = () => {
     }
   };
 
-  // Update handlePlotClick
-  const handlePlotClick = (index) => {
-    if (!currentAction) return;
+  // Update the constant
+  const TOKENS_PER_PLOT = 50000; // 100,000 tokens needed per plot
 
+  // Replace the validatePlot function
+  const validatePlot = async (plotIndex) => {
+    try {
+      if (!isWalletConnected) {
+        toast.error("Please connect your wallet first!");
+        return false;
+      }
+
+      // Only check token balance for new plantings
+      const availablePlots = Math.floor(userBalance / TOKENS_PER_PLOT);
+      
+      if (plotIndex >= availablePlots) {
+        toast.error(
+          `This plot is locked! You need ${TOKENS_PER_PLOT} testfun per plot. ` +
+          `Current balance (${formatBalance(userBalance)} testfun) allows access to ${availablePlots} plots.`
+        );
+        return false;
+      }
+
+      return true;
+
+    } catch (error) {
+      console.error("Plot validation error:", error);
+      toast.error(`Failed to validate plot: ${error.message}`);
+      return false;
+    }
+  };
+
+  // Update handlePlotClick function
+  const handlePlotClick = async (index) => {
+    // Add immediate logging
+    console.log('Plot clicked - Initial check:', {
+      index,
+      currentAction,
+      plotData: plots[index],
+      isWalletConnected
+    });
+
+    if (!currentAction) {
+      console.log('No current action selected');
+      return;
+    }
+
+    if (!isWalletConnected) {
+      toast.error("Please connect your wallet first!");
+      return;
+    }
+
+    const plot = plots[index];
+
+    // Detailed logging for harvest action
     if (currentAction === 'harvest') {
-      const plot = plots[index];
+      console.log('Harvest action check:', {
+        index,
+        isPlanted: plot.planted,
+        growthStage: plot.growthStage,
+        readyToHarvest: plot.readyToHarvest,
+        isHarvesting: harvestingPlots[index]
+      });
+
+      // Remove the validatePlot check for harvest
       if (plot.readyToHarvest && !harvestingPlots[index]) {
+        console.log('Initiating harvest confirmation for plot:', index);
         setSelectedPlotForHarvest({ plot, index });
         setShowHarvestConfirm(true);
+      } else {
+        if (!plot.readyToHarvest) {
+          toast.info("This plant is not ready to harvest yet!");
+        } else if (harvestingPlots[index]) {
+          toast.info("Harvest is already in progress!");
+        }
       }
       return;
     }
 
+    // For non-harvest actions, use validatePlot
+    const isValidPlot = await validatePlot(index);
+    if (!isValidPlot) {
+      console.log(`Plot ${index} validation failed for ${currentAction} action`);
+      return;
+    }
+
+    // Rest of the function for plant/water actions
     setPlots(prevPlots => {
       const newPlots = [...prevPlots];
       const plot = { ...newPlots[index] };
@@ -670,24 +729,43 @@ const Join = () => {
         case 'plant':
           if (!plot.planted && selectedSeed) {
             // Check if user owns the selected seed
-            if (!userSeeds[selectedSeed] || userSeeds[selectedSeed] <= 0) {
-              alert("You don't own this seed! Please purchase it from the store first.");
+            const currentSeedCount = userSeeds[selectedSeed] || 0;
+            
+            if (currentSeedCount <= 0) {
+              toast.error("You don't own this seed! Please purchase it from the store first.");
               return prevPlots;
             }
 
-            // Plant the seed first
-            plot.planted = true;
-            plot.plantType = selectedSeed;
-            plot.growthStage = 0;
-            plot.plantedAt = Date.now();
-            plot.readyToHarvest = false;
-            plot.isWatered = false;
+            try {
+              // Plant the seed
+              plot.planted = true;
+              plot.plantType = selectedSeed;
+              plot.growthStage = 0;
+              plot.plantedAt = Date.now();
+              plot.readyToHarvest = false;
+              plot.isWatered = false;
 
-            // Only decrement seed count after successful planting
-            decrementSeedCount(selectedSeed);
-            
-            newPlots[index] = plot;
-            return newPlots;
+              newPlots[index] = plot;
+
+              // Update seeds count
+              const updatedSeeds = {
+                ...userSeeds,
+                [selectedSeed]: currentSeedCount - 1
+              };
+              
+              // Update state and save data atomically
+              setUserSeeds(updatedSeeds);
+              saveUserData(walletAddress, {
+                seeds: updatedSeeds,
+                plots: newPlots
+              });
+
+              return newPlots;
+            } catch (error) {
+              console.error("Error planting seed:", error);
+              toast.error("Failed to plant seed. Please try again.");
+              return prevPlots;
+            }
           }
           return prevPlots;
           
@@ -878,39 +956,81 @@ const Join = () => {
     </div>
   );
 
+  // Add this new state to track quantities for all seeds
+  const [seedQuantities, setSeedQuantities] = useState(
+    Object.fromEntries(seedsData.map(seed => [seed.id, 1]))
+  );
+
+  // Add function to handle quantity changes
+  const handleQuantityChange = (seedId, value) => {
+    setSeedQuantities(prev => ({
+      ...prev,
+      [seedId]: Math.max(1, value)
+    }));
+  };
+
   const renderStoreContent = () => (
     <div className="store-wrapper">
       <div className="store-container">
-        <div className="wallet-balance">
+        <div className="current-balance">
           Current Balance: {formatBalance(userBalance)} testfun
         </div>
         <div className="store-items">
-          {seedsData.map(seed => (
-            <div key={seed.id} className="store-item">
-              <div className="price-tag">
-                {formatBalance(seed.price)} testfun
+          {seedsData.map(seed => {
+            const quantity = seedQuantities[seed.id];
+            const totalPrice = seed.price * quantity;
+            
+            return (
+              <div key={seed.id} className="store-item">
+                <div className="price-tag">
+                 Price: {formatBalance(totalPrice)} testfun
+                </div>
+                <div className="seed-count">
+                  Owned: {userSeeds[seed.id] || 0}
+                </div>
+                <div className="item-icon">{seed.icon}</div>
+                <div className="item-details">
+                  <h3>{seed.name}</h3>
+                  <p>{seed.description}</p>
+                  <p>Growth Time: {seed.growthTime}s</p>
+                  <p>Reward: {formatBalance(seed.reward)} testfun</p>
+                  <div className="quantity-selector">
+                    <button 
+                      className="quantity-btn"
+                      onClick={() => handleQuantityChange(seed.id, quantity - 1)}
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      value={quantity}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 1;
+                        handleQuantityChange(seed.id, val);
+                      }}
+                      className="quantity-input"
+                    />
+                    <button 
+                      className="quantity-btn"
+                      onClick={() => handleQuantityChange(seed.id, quantity + 1)}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <button 
+                  className={`purchase-btn ${userBalance < totalPrice ? 'disabled' : ''}`}
+                  onClick={() => purchaseSeed({ ...seed, quantity })}
+                  disabled={userBalance < totalPrice}
+                >
+                  {userBalance < totalPrice ? 
+                    `Need ${formatBalance(totalPrice - userBalance)} more testfun` : 
+                    `Buy ${quantity} Seed${quantity > 1 ? 's' : ''}`}
+                </button>
               </div>
-              <div className="seed-count">
-                Owned: {userSeeds[seed.id] || 0}
-              </div>
-              <div className="item-icon">{seed.icon}</div>
-              <div className="item-details">
-                <h3>{seed.name}</h3>
-                <p>{seed.description}</p>
-                <p>Growth Time: {seed.growthTime}s</p>
-                <p>Reward: {formatBalance(seed.reward)} testfun</p>
-              </div>
-              <button 
-                className={`purchase-btn ${userBalance < seed.price ? 'disabled' : ''}`}
-                onClick={() => purchaseSeed(seed)}
-                disabled={userBalance < seed.price}
-              >
-                {userBalance < seed.price ? 
-                  `Need ${formatBalance(seed.price - userBalance)} more testfun` : 
-                  'Buy Seed'}
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <ToastContainer 
           position="top-center"
@@ -1020,34 +1140,56 @@ const Join = () => {
   // Update render to show loading state
   const renderPlot = (plot, index) => {
     const isHarvesting = harvestingPlots[index];
+    const availablePlots = Math.floor(userBalance / TOKENS_PER_PLOT);
+    const isLocked = !plot.planted && index >= availablePlots;
     
     return (
       <div 
         key={index} 
-        className={`plot ${plot.planted ? 'planted' : ''} ${plot.readyToHarvest ? 'ready' : ''} ${isHarvesting ? 'harvesting' : ''}`}
+        className={`plot 
+          ${plot.planted ? 'planted' : ''} 
+          ${plot.readyToHarvest ? 'ready-harvest' : ''} 
+          ${isHarvesting ? 'harvesting' : ''}
+          ${isLocked ? 'locked' : ''}
+          ${currentAction === 'harvest' && plot.readyToHarvest ? 'harvest-available' : ''}
+        `}
         onClick={() => handlePlotClick(index)}
+        onMouseEnter={() => console.log(`Plot ${index} hover - Status:`, {
+          planted: plot.planted,
+          readyToHarvest: plot.readyToHarvest,
+          currentAction
+        })}
       >
-        {plot.planted && (
-          <div className="plant-info">
-            <div className="plant-icon">
-              {seedsData.find(seed => seed.id === plot.plantType)?.icon || '🌱'}
-            </div>
-            <div className="growth-stage">
-              Stage: {plot.growthStage}
-            </div>
-            {plot.readyToHarvest && (
-              <div className="harvest-status">
-                {isHarvesting ? (
-                  <>
-                    <div className="loading-indicator">🔄</div>
-                    <div className="loading-text">Harvesting...</div>
-                  </>
-                ) : (
-                  '✨ Ready to Harvest!'
-                )}
-              </div>
-            )}
+        {isLocked ? (
+          <div className="locked-overlay">
+            <span className="lock-icon">🔒</span>
+            <span className="tokens-needed">
+              {formatBalance(TOKENS_PER_PLOT)} testfun
+            </span>
           </div>
+        ) : (
+          plot.planted && (
+            <div className="plant-info">
+              <div className="plant-icon">
+                {seedsData.find(seed => seed.id === plot.plantType)?.icon || '🌱'}
+              </div>
+              <div className="growth-stage">
+                Stage: {plot.growthStage}
+              </div>
+              {plot.readyToHarvest && (
+                <div className="harvest-status">
+                  {isHarvesting ? (
+                    <>
+                      <div className="loading-indicator">🔄</div>
+                      <div className="loading-text">Harvesting...</div>
+                    </>
+                  ) : (
+                    '✨ Ready to Harvest!'
+                  )}
+                </div>
+              )}
+            </div>
+          )
         )}
       </div>
     );
@@ -1079,6 +1221,83 @@ const Join = () => {
     .plot.harvesting {
       pointer-events: none;
       opacity: 0.8;
+    }
+
+    .plot.locked {
+      background-color: rgba(0, 0, 0, 0.5);
+      cursor: not-allowed;
+    }
+
+    .locked-overlay {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #fff;
+      text-align: center;
+    }
+
+    .lock-icon {
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+
+    .tokens-needed {
+      font-size: 12px;
+      color: #ccc;
+    }
+
+    .quantity-selector {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 10px 0;
+      gap: 8px;
+    }
+
+    .quantity-btn {
+      background: #2a2a2a;
+      border: 1px solid #4a4a4a;
+      color: white;
+      width: 30px;
+      height: 30px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transition: all 0.2s;
+    }
+
+    .quantity-btn:hover {
+      background: #3a3a3a;
+    }
+
+    .quantity-btn:active {
+      transform: scale(0.95);
+    }
+
+    .quantity-input {
+      width: 50px;
+      height: 30px;
+      text-align: center;
+      background: #2a2a2a;
+      border: 1px solid #4a4a4a;
+      color: white;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .quantity-input::-webkit-inner-spin-button,
+    .quantity-input::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .quantity-input {
+      -moz-appearance: textfield;
     }
   `;
 
@@ -1205,6 +1424,18 @@ const Join = () => {
 
     checkNetworkAndWallet();
   }, [isWalletConnected]);
+
+  // Add useEffect to monitor plot states
+  useEffect(() => {
+    console.log('Current plots state:', plots.map((plot, index) => ({
+      index,
+      planted: plot.planted,
+      plantType: plot.plantType,
+      growthStage: plot.growthStage,
+      readyToHarvest: plot.readyToHarvest,
+      isWatered: plot.isWatered
+    })));
+  }, [plots]);
 
   return (
     <div className="join-container">
